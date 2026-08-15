@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f8f5">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <title>用药记录器</title>
+  <style>
+    :root { color-scheme: light; --ink:#473d38; --muted:#82766f; --line:#eee0d8; --paper:#fffdfb; --wash:#fbf6f1; --accent:#ad6c63; --soft:#f8e6df; --danger:#a2352c; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--wash); color:var(--ink); font-family:system-ui,"Microsoft YaHei",sans-serif; }
+    main { max-width:560px; margin:auto; min-height:100vh; padding:28px 18px 50px; }
+    header { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:20px; }
+    h1 { font-size:24px; margin:0; letter-spacing:.02em; } .today { color:var(--muted); font-size:14px; }
+    .love-note { background:linear-gradient(135deg,#f8e4dc,#fff5e9); border-radius:20px; padding:20px; margin-bottom:16px; color:#6a504a; }
+    .love-note .heart { font-size:22px; margin-bottom:6px; } .love-note p { font-size:17px; line-height:1.55; margin:0; } .love-note small { display:block; margin-top:10px; color:#92736d; }
+    .day-card { background:var(--paper); border:1px solid var(--line); border-radius:16px; padding:14px 18px; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; }
+    .day-card span { color:var(--muted); font-size:14px; } .day-card strong { font-weight:500; color:var(--accent); }
+    .empty, .medicine { background:var(--paper); border:1px solid var(--line); border-radius:18px; padding:18px; margin-bottom:14px; box-shadow:0 4px 18px #6e44300b; }
+    .medicine-head { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
+    h2 { margin:0 0 5px; font-size:20px; } .detail { margin:0; color:var(--muted); font-size:14px; }
+    .remove { background:none; border:0; color:var(--muted); cursor:pointer; padding:4px; font-size:14px; }
+    .schedule { margin:18px 0 12px; padding:0; list-style:none; }
+    .schedule li { display:flex; align-items:center; gap:12px; padding:11px 0; border-top:1px solid var(--line); }
+    .time { font-variant-numeric:tabular-nums; width:48px; font-size:14px; color:var(--muted); }
+    .dose { flex:1; font-size:15px; }
+    .taken { color:var(--accent); font-size:14px; white-space:nowrap; }
+    button { font:inherit; cursor:pointer; border-radius:10px; border:1px solid var(--line); background:#fff; color:var(--ink); min-height:38px; padding:7px 12px; }
+    button.primary { border-color:var(--accent); background:var(--accent); color:#fff; } button.done { background:var(--soft); border-color:var(--soft); color:var(--accent); }
+    .add { width:100%; border-style:dashed; color:var(--accent); background:transparent; margin-top:4px; }
+    dialog { width:min(92vw,460px); border:0; border-radius:16px; padding:22px; color:var(--ink); box-shadow:0 12px 48px #17211940; }
+    dialog::backdrop { background:#17211955; } dialog h2 { margin-bottom:18px; }
+    label { display:block; font-size:14px; margin:14px 0 6px; color:var(--muted); }
+    input { width:100%; min-height:42px; border:1px solid var(--line); border-radius:9px; padding:8px 10px; font:inherit; color:var(--ink); background:#fff; }
+    .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; } .dialog-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:22px; }
+    .note { margin:22px 4px 0; color:var(--muted); line-height:1.5; font-size:12px; }
+    .status { display:inline-block; margin:0 0 10px; color:var(--accent); background:var(--soft); border-radius:99px; padding:4px 8px; font-size:12px; }
+    @media (max-width:380px) { main{padding-inline:14px}.schedule li{gap:7px}.time{width:43px} button{padding:7px 9px} }
+  </style>
+</head>
+<body>
+  <main>
+    <header><h1>今天的用药</h1><span class="today" id="date"></span></header>
+    <section class="love-note" aria-label="来自女儿的温馨提示"><div class="heart" aria-hidden="true">♡</div><p>今天也要记得按时吃药，好好照顾自己。<br>我一直惦记着你。</p><small>—— 来自女儿的小提醒</small></section>
+    <section class="day-card" aria-live="polite"><span>今日用药情况</span><strong id="day-summary">还没有记录</strong></section>
+    <section id="list" aria-live="polite"></section>
+    <button class="add" id="add">＋ 添加一种药</button>
+    <p class="note">本工具仅协助记录与提醒。是否补服、调整剂量请遵循药品说明或医嘱。</p>
+  </main>
+  <dialog id="editor">
+    <form id="form">
+      <h2>添加药物</h2>
+      <label for="name">药名</label><input id="name" name="name" required placeholder="例如：维生素 D">
+      <div class="row"><div><label for="amount">每次用量</label><input id="amount" name="amount" required placeholder="例如：1 粒"></div><div><label for="times">每日次数</label><select id="times" name="times"><option value="1">每日 1 次</option><option value="2">每日 2 次</option><option value="3">每日 3 次</option></select></div></div>
+      <div id="time-fields">
+        <label for="reminder-1">第 1 次提醒</label><input id="reminder-1" name="reminder1" required type="time" value="08:00">
+        <div data-time="2"><label for="reminder-2">第 2 次提醒</label><input id="reminder-2" name="reminder2" type="time" value="13:00"></div>
+        <div data-time="3"><label for="reminder-3">第 3 次提醒</label><input id="reminder-3" name="reminder3" type="time" value="20:00"></div>
+      </div>
+      <div class="dialog-actions"><button type="button" id="cancel">取消</button><button class="primary" type="submit">保存</button></div>
+    </form>
+  </dialog>
+  <script>
+    const STORE='simple-medication-tracker-v1';
+    const list=document.querySelector('#list'), dialog=document.querySelector('#editor'), form=document.querySelector('#form');
+    let meds=JSON.parse(localStorage.getItem(STORE)||'[]');
+    const dayKey=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
+    document.querySelector('#date').textContent=new Intl.DateTimeFormat('zh-CN',{month:'long',day:'numeric',weekday:'short'}).format(new Date());
+    const save=()=>localStorage.setItem(STORE,JSON.stringify(meds));
+    function render(){
+      list.innerHTML='';
+      let planned=0, loggedTotal=0; meds.forEach(m=>{planned+=m.times;loggedTotal+=Object.keys(m.entries?.[dayKey()]||{}).length});
+      document.querySelector('#day-summary').textContent=planned?`已记录 ${loggedTotal}/${planned} 次`:'还没有记录';
+      if(!meds.length){ list.innerHTML='<div class="empty">还没有药物记录。添加后，按提醒时间点一下“记录服用”即可。</div>'; return; }
+      meds.forEach(m=>{
+        const entries=m.entries?.[dayKey()]||{}; const card=document.createElement('article'); card.className='medicine';
+        const count=Object.keys(entries).length;
+        card.innerHTML=`<div class="medicine-head"><div><h2>${esc(m.name)}</h2><p class="detail">每次 ${esc(m.amount)} · 每日 ${m.times} 次</p></div><button class="remove" data-remove="${m.id}" aria-label="删除 ${esc(m.name)}">删除</button></div><p class="status">今日已记录 ${count}/${m.times} 次</p><ul class="schedule"></ul>`;
+        const ul=card.querySelector('.schedule');
+        m.reminders.forEach((time,i)=>{ const logged=entries[i]; const li=document.createElement('li'); li.innerHTML=`<span class="time">${time}</span><span class="dose">${esc(m.amount)}</span>${logged?`<span class="taken">${new Date(logged).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})} 已服</span><button data-undo="${m.id}:${i}">撤销</button>`:`<button class="primary" data-take="${m.id}:${i}">记录服用</button>`}`; ul.append(li); }); list.append(card);
+      });
+    }
+    const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    document.querySelector('#add').onclick=()=>{ form.reset(); document.querySelector('#times').value=1; updateTimeFields(); dialog.showModal(); };
+    document.querySelector('#cancel').onclick=()=>dialog.close();
+    function updateTimeFields(){ const count=Number(document.querySelector('#times').value); document.querySelectorAll('[data-time]').forEach(el=>el.hidden=Number(el.dataset.time)>count); }
+    document.querySelector('#times').onchange=updateTimeFields;
+    form.onsubmit=e=>{ e.preventDefault(); const data=new FormData(form), times=Number(data.get('times')), reminders=Array.from({length:times},(_,i)=>data.get(`reminder${i+1}`)); if(reminders.some(x=>!/^([01]\d|2[0-3]):[0-5]\d$/.test(x))){alert('请填写有效的提醒时间。');return;} meds.push({id:crypto.randomUUID(),name:data.get('name').trim(),amount:data.get('amount').trim(),times,reminders,entries:{}}); save(); dialog.close(); render(); requestNotifications(); };
+    list.onclick=e=>{ const [id,index]=(e.target.dataset.take||e.target.undo||'').split(':'); if(id){ const m=meds.find(x=>x.id===id); m.entries??={}; m.entries[dayKey()]??={}; if(e.target.dataset.take)m.entries[dayKey()][index]=new Date().toISOString(); else delete m.entries[dayKey()][index]; save();render();return;} if(e.target.dataset.remove){meds=meds.filter(m=>m.id!==e.target.dataset.remove);save();render();} };
+    function requestNotifications(){ if('Notification' in window&&Notification.permission==='default') Notification.requestPermission(); }
+    function reminders(){ const now=new Date(), hhmm=now.toTimeString().slice(0,5), stamp=dayKey()+'-'+hhmm; meds.forEach(m=>m.reminders.forEach((t,i)=>{if(t===hhmm&&!(m.entries?.[dayKey()]||{})[i]&&sessionStorage.getItem(m.id+stamp)!=='1'){sessionStorage.setItem(m.id+stamp,'1'); if(Notification.permission==='granted')new Notification('用药提醒',{body:`${m.name}：${m.amount}`});}})); }
+    if('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js');
+    requestNotifications(); render(); reminders(); setInterval(reminders,30000);
+  </script>
+</body>
+</html>
